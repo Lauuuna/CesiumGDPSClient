@@ -1,4 +1,4 @@
-﻿const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -36,6 +36,7 @@ function createWindow() {
         minWidth: 800,
         minHeight: 500,
         autoHideMenuBar: true,
+        icon: path.join(__dirname, 'build', 'icon.png'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
@@ -193,7 +194,7 @@ const EXPECTED_SAVED_JSON = {
         "saveDir": "CesiumGDPS"
     }],
     "1.4.0-migration": true,
-    "server-order": [-2, 0],
+    "server-order": [0],
     "ss-rainbow": false,
     "secret-settings": false
 };

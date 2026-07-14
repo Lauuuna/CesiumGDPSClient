@@ -1,6 +1,8 @@
-﻿{
+{
   "name": "cesium-launcher",
   "version": "1.0.0",
+  "description": "CesiumGDPS Launcher",
+  "author": "Lauuuna",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
