@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const mainBtn = document.getElementById('main-btn');
+    const cancelBtn = document.getElementById('cancel-btn');
     const updateBtn = document.getElementById('update-btn');
     const installPathEl = document.getElementById('install-path');
     const changeDirBtn = document.getElementById('change-dir-btn');
@@ -25,6 +26,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const dynamicBgEl = document.getElementById('dynamic-bg');
     const adaptBgToggle = document.getElementById('adapt-bg-toggle');
     const adaptBgRow = document.getElementById('adapt-bg-row');
+    const statsContent = document.getElementById('stats-content');
+    const resetStatsBtn = document.getElementById('reset-stats-btn');
 
     const cpBackdrop = document.getElementById('cp-backdrop');
     const cpPopup = document.getElementById('cp-popup');
@@ -57,6 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const DOWNLOADING = 'DOWNLOADING';
     const PAUSED = 'PAUSED';
     const GAME_RUNNING = 'GAME_RUNNING';
+    const SESSION_PENDING = 'SESSION_PENDING';
 
     const DEFAULT_INSTALL_PATH = 'C:\\Games\\CesiumGD';
 
@@ -406,7 +410,65 @@ document.addEventListener('DOMContentLoaded', () => {
             Object.values(settingsPanels).forEach(p => p.classList.remove('active'));
             const panel = settingsPanels[btn.dataset.cat];
             if (panel) panel.classList.add('active');
+            if (btn.dataset.cat === 'about') renderStats();
         });
+    });
+
+    // ----- stats display -----
+
+    function formatDuration(ms) {
+        if (!ms || ms <= 0) return '0 минут';
+        const totalSeconds = Math.floor(ms / 1000);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const parts = [];
+        if (hours > 0) parts.push(`${hours} ч`);
+        if (minutes > 0) parts.push(`${minutes} мин`);
+        if (parts.length === 0) parts.push('<1 мин');
+        return parts.join(' ');
+    }
+
+    async function renderStats() {
+        try {
+            const stats = await window.api.getPlayStats();
+            if (!stats.sessionCount) {
+                statsContent.innerHTML = '<p class="stats-empty">Статистика пока пуста. Сыграйте хотя бы раз.</p>';
+                return;
+            }
+
+            const lastPlayed = stats.lastPlayed
+                ? new Date(stats.lastPlayed).toLocaleDateString('ru-RU')
+                : '—';
+
+            statsContent.innerHTML = `
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <span class="stat-value">${stats.totalHours}</span>
+                        <span class="stat-label">всего часов</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">${stats.sessionCount}</span>
+                        <span class="stat-label">сессий</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">${formatDuration(stats.lastSessionDuration)}</span>
+                        <span class="stat-label">последняя сессия</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">${lastPlayed}</span>
+                        <span class="stat-label">последний запуск</span>
+                    </div>
+                </div>
+            `;
+        } catch {
+            statsContent.innerHTML = '<p class="stats-empty">Не удалось загрузить статистику.</p>';
+        }
+    }
+
+    resetStatsBtn?.addEventListener('click', async () => {
+        if (!confirm('Сбросить всю статистику?')) return;
+        await window.api.resetPlayStats();
+        renderStats();
     });
 
     // ----- general UI -----
@@ -415,11 +477,9 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.classList.toggle('ui-blocked', blocked);
         changeDirBtn.disabled = blocked;
         resetDirBtn.disabled = blocked;
-        settingsBtn.disabled = blocked;
-        checkUpdatesBtn.disabled = blocked;
-        checkClientUpdatesBtn.disabled = blocked;
         deleteGameBtn.disabled = blocked;
         verifyIntegrityBtn.disabled = blocked;
+        checkUpdatesBtn.disabled = blocked;
     }
 
     function setState(state) {
@@ -438,12 +498,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 mainBtn.disabled = false;
                 mainBtn.style.display = '';
                 updateBtn.style.display = 'none';
+                cancelBtn.style.display = 'none';
                 break;
             case READY:
                 mainBtn.textContent = 'ИГРАТЬ';
                 mainBtn.disabled = false;
                 mainBtn.style.display = '';
                 updateBtn.style.display = 'none';
+                cancelBtn.style.display = 'none';
                 break;
             case UPDATE_AVAILABLE:
                 mainBtn.textContent = 'ИГРАТЬ';
@@ -451,24 +513,35 @@ document.addEventListener('DOMContentLoaded', () => {
                 mainBtn.style.display = '';
                 updateBtn.textContent = 'ОБНОВИТЬ';
                 updateBtn.style.display = '';
+                cancelBtn.style.display = 'none';
                 break;
             case DOWNLOADING:
                 mainBtn.textContent = 'ПАУЗА';
                 mainBtn.disabled = false;
                 mainBtn.style.display = '';
                 updateBtn.style.display = 'none';
+                cancelBtn.style.display = '';
                 break;
             case PAUSED:
                 mainBtn.textContent = 'ПРОДОЛЖИТЬ';
                 mainBtn.disabled = false;
                 mainBtn.style.display = '';
                 updateBtn.style.display = 'none';
+                cancelBtn.style.display = '';
+                break;
+            case SESSION_PENDING:
+                mainBtn.textContent = 'ПРОДОЛЖИТЬ';
+                mainBtn.disabled = false;
+                mainBtn.style.display = '';
+                updateBtn.style.display = 'none';
+                cancelBtn.style.display = '';
                 break;
             case GAME_RUNNING:
                 mainBtn.textContent = 'ИГРА...';
                 mainBtn.disabled = true;
                 mainBtn.style.display = '';
                 updateBtn.style.display = 'none';
+                cancelBtn.style.display = 'none';
                 break;
         }
     }
@@ -510,7 +583,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    checkInstallStatus();
+    async function checkSessionRestore() {
+        const session = await window.api.getSessionState();
+        if (session && session.exists && session.remaining > 0) {
+            setState(SESSION_PENDING);
+        } else {
+            if (session && session.exists) {
+                await window.api.clearSession();
+            }
+            await checkInstallStatus();
+        }
+    }
 
     changeDirBtn.addEventListener('click', async () => {
         const selected = await window.api.selectDirectory();
@@ -536,6 +619,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         switch (currentState) {
             case IDLE:
+            case SESSION_PENDING:
                 await startInstallProcess();
                 break;
             case READY:
@@ -559,6 +643,24 @@ document.addEventListener('DOMContentLoaded', () => {
     updateBtn.addEventListener('click', async () => {
         if (currentState !== UPDATE_AVAILABLE) return;
         await startInstallProcess();
+    });
+
+    cancelBtn.addEventListener('click', async () => {
+        if (currentState === SESSION_PENDING) {
+            const cancel = confirm('Отменить восстановление незавершённой загрузки?');
+            if (!cancel) return;
+            await window.api.clearSession();
+            showProgress(false);
+            setState(IDLE);
+            return;
+        }
+        if (currentState !== DOWNLOADING && currentState !== PAUSED) return;
+        const cancel = confirm('Отменить загрузку? Прогресс будет сохранён.');
+        if (!cancel) return;
+        await window.api.cancelUpdate();
+        showProgress(false);
+        setState(IDLE);
+        await checkInstallStatus();
     });
 
     discordBtn.addEventListener('click', () => {
@@ -593,7 +695,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 alert('Установлена актуальная версия игры.');
             }
-        } catch (err) {
+        } catch {
             alert('Не удалось проверить обновления игры.');
         }
     });
@@ -611,7 +713,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 alert(`Установлена актуальная версия клиента (${result.currentVersion}).`);
             }
-        } catch (err) {
+        } catch {
             alert('Не удалось проверить обновления клиента.');
         }
     });
@@ -648,7 +750,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 setBlockUI(false);
                 alert(result.message);
             }
-        } catch (err) {
+        } catch {
             showProgress(false);
             setBlockUI(false);
             alert('Ошибка проверки целостности игры.');
@@ -682,6 +784,12 @@ document.addEventListener('DOMContentLoaded', () => {
         setState(READY);
     });
 
+    window.api.onUpdateCancelled(() => {
+        showProgress(false);
+        setState(IDLE);
+        checkInstallStatus();
+    });
+
     window.api.onUpdateError((error) => {
         showProgress(false);
         alert('Ошибка обновления: ' + error);
@@ -692,6 +800,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentState === GAME_RUNNING) {
             setState(READY);
             window.api.setRpcActivity({ state: 'Просматривает клиент' });
+            renderStats();
         }
     });
 
@@ -710,4 +819,6 @@ document.addEventListener('DOMContentLoaded', () => {
     window.api.onAutoUpdaterError((err) => {
         console.warn('Auto-updater error:', err);
     });
+
+    checkSessionRestore();
 });

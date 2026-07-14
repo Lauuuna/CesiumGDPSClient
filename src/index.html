@@ -115,8 +115,13 @@
                     <div class="settings-panel" id="panel-about">
                         <div class="about-content">
                             <p>CesiumClient постоянно совершенствуется, но это не точно.</p>
-                            <p class="about-version">Текущая версия: v1.0.2</p>
+                            <p class="about-version">Текущая версия: v1.0.3</p>
                         </div>
+                        <div class="settings-section-header">Статистика</div>
+                        <div class="stats-content" id="stats-content">
+                            <p class="stats-empty">Загрузка...</p>
+                        </div>
+                        <button class="settings-option settings-option-danger" id="reset-stats-btn">Сбросить статистику</button>
                     </div>
                 </div>
             </div>
@@ -141,6 +146,7 @@
 
     <div class="button-group">
         <button class="action-btn action-btn-secondary" id="update-btn" style="display:none;">ОБНОВИТЬ</button>
+        <button class="action-btn action-btn-cancel" id="cancel-btn" style="display:none;">ОТМЕНА</button>
         <button class="action-btn" id="main-btn">СКАЧАТЬ</button>
     </div>
 
