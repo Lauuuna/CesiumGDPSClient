@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const https = require('https');
 const http = require('http');
 const { exec } = require('child_process');
+const { EventEmitter } = require('events');
 const { autoUpdater } = require('electron-updater');
 
 const BASE_URL = 'https://lauuuna.github.io/CesiumGDPS/CesiumGDPS/';
@@ -17,10 +18,19 @@ const state = {
     isPaused: false,
     activeRequests: []
 };
+const pauseEvents = new EventEmitter();
+
+async function waitIfPaused() {
+    while (state.isPaused) {
+        await new Promise(resolve => pauseEvents.once('resumed', resolve));
+    }
+}
 
 const EXCLUDED_PATHS = [
     'geode/unzipped/'
 ];
+const CHECK_PERCENT = 30;
+const DOWNLOAD_PERCENT = 70;
 
 const keepAliveAgent = new https.Agent({
     keepAlive: true,
@@ -298,8 +308,10 @@ ipcMain.handle('game:fixFiles', async (event, installDir, files) => {
             manifest = await fetchJSON(MANIFEST_URL);
         }
 
+        let failedFixes = [];
+
         for (const relPath of files) {
-            while (state.isPaused) await new Promise(r => setTimeout(r, 200));
+            await waitIfPaused();
 
             const fileUrl = new URL(relPath.replace(/\\/g, '/'), BASE_URL).href;
             const localPath = path.join(installDir, relPath);
@@ -309,7 +321,7 @@ ipcMain.handle('game:fixFiles', async (event, installDir, files) => {
                 await downloadFile(fileUrl, localPath);
                 fixed++;
             } catch (err) {
-                console.log(`Failed to fix ${relPath}: ${err.message}`);
+                failedFixes.push(relPath);
             }
 
             const pct = Math.round(((fixed + 1) / total) * 100);
@@ -329,6 +341,10 @@ ipcMain.handle('game:fixFiles', async (event, installDir, files) => {
             }
             manifest.files = updatedFiles;
             fs.writeFileSync(localManifestPath, JSON.stringify(manifest, null, 2));
+        }
+
+        if (failedFixes.length > 0) {
+            console.warn(`Не удалось восстановить ${failedFixes.length} файлов:`, failedFixes.join(', '));
         }
 
         return { success: true, fixed, total };
@@ -396,6 +412,7 @@ ipcMain.handle('game:pause', () => {
 
 ipcMain.handle('game:resume', () => {
     state.isPaused = false;
+    pauseEvents.emit('resumed');
 });
 
 ipcMain.handle('game:startUpdate', async (event, installDir, skipCheck) => {
@@ -425,7 +442,7 @@ ipcMain.handle('game:startUpdate', async (event, installDir, skipCheck) => {
         } else {
             let lastSentPct = -1;
             for (let i = 0; i < totalEntries; i++) {
-                while (state.isPaused) await new Promise(r => setTimeout(r, 200));
+                await waitIfPaused();
 
                 const [relPath, expectedHash] = entries[i];
                 const localPath = path.join(installDir, relPath);
@@ -437,7 +454,7 @@ ipcMain.handle('game:startUpdate', async (event, installDir, skipCheck) => {
                 }
                 if (needsUpdate) filesToUpdate.push(relPath);
 
-                const checkPct = Math.round(((i + 1) / totalEntries) * 30);
+                const checkPct = Math.round(((i + 1) / totalEntries) * CHECK_PERCENT);
                 if (checkPct !== lastSentPct) {
                     lastSentPct = checkPct;
                     event.sender.send('update-progress', {
@@ -469,13 +486,11 @@ ipcMain.handle('game:startUpdate', async (event, installDir, skipCheck) => {
             str: '0 B/s'
         };
 
+        let failedDownloads = [];
+
         async function downloadWorker() {
             while (filesToUpdate.length > 0) {
-                while (state.isPaused) {
-                    speedTracker.time = Date.now();
-                    speedTracker.lastBytes = speedTracker.totalBytes;
-                    await new Promise(r => setTimeout(r, 200));
-                }
+                await waitIfPaused();
 
                 const relPath = filesToUpdate.shift();
                 const localPath = path.join(installDir, relPath);
@@ -488,7 +503,7 @@ ipcMain.handle('game:startUpdate', async (event, installDir, skipCheck) => {
                         speedTracker.totalBytes += chunkSize;
                     });
                 } catch (err) {
-                    console.log(`Skipped ${relPath}: ${err.message}`);
+                    failedDownloads.push(relPath);
                 }
 
                 completedDownloads++;
@@ -506,7 +521,7 @@ ipcMain.handle('game:startUpdate', async (event, installDir, skipCheck) => {
                 const totalElapsed = now - startTime;
                 const avgPerFile = totalElapsed / completedDownloads;
                 const etaSec = Math.round(avgPerFile * (downloadCount - completedDownloads) / 1000);
-                const pct = 30 + Math.round((completedDownloads / downloadCount) * 70);
+                const pct = CHECK_PERCENT + Math.round((completedDownloads / downloadCount) * DOWNLOAD_PERCENT);
 
                 let speedStr = speedTracker.str;
                 if (speedTracker.totalBytes > 0 && totalElapsed > 1000) {
@@ -526,6 +541,10 @@ ipcMain.handle('game:startUpdate', async (event, installDir, skipCheck) => {
             workers.push(downloadWorker());
         }
         await Promise.all(workers);
+
+        if (failedDownloads.length > 0) {
+            console.warn(`Не удалось загрузить ${failedDownloads.length} файлов:`, failedDownloads.join(', '));
+        }
 
         fs.writeFileSync(path.join(installDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
         fs.writeFileSync(path.join(installDir, 'version.json'), JSON.stringify({ version: remoteVersion }));

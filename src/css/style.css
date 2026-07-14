@@ -351,3 +351,20 @@ body {
     left: 0;
     top: 0;
 }
+
+.version-text {
+    position: absolute;
+    bottom: 8px;
+    right: 12px;
+    font-size: 0.7rem;
+    color: #555;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    pointer-events: none;
+}
+
+body.ui-blocked .change-dir-btn,
+body.ui-blocked .settings-btn {
+    opacity: 0.4;
+    cursor: default;
+}

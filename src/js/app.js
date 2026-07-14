@@ -33,14 +33,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function setBlockUI(blocked) {
-        const val = blocked ? '0.4' : '1';
-        const cur = blocked ? 'default' : 'pointer';
+        document.body.classList.toggle('ui-blocked', blocked);
         changeDirBtn.disabled = blocked;
-        changeDirBtn.style.opacity = val;
-        changeDirBtn.style.cursor = cur;
         settingsBtn.disabled = blocked;
-        settingsBtn.style.opacity = val;
-        settingsBtn.style.cursor = cur;
         checkUpdatesBtn.disabled = blocked;
         deleteGameBtn.disabled = blocked;
         verifyIntegrityBtn.disabled = blocked;
