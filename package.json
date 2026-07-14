@@ -1,6 +1,6 @@
 {
   "name": "cesium-launcher",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "CesiumGDPS Launcher",
   "author": "Lauuuna",
   "main": "main.js",
@@ -43,6 +43,7 @@
     }
   },
   "dependencies": {
+    "discord-rpc": "^4.0.1",
     "electron-updater": "^6.8.9"
   }
 }

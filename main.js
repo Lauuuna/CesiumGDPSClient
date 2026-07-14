@@ -7,12 +7,32 @@ const http = require('http');
 const { exec } = require('child_process');
 const { EventEmitter } = require('events');
 const { autoUpdater } = require('electron-updater');
+const DiscordRPC = require('discord-rpc');
 
 const BASE_URL = 'https://lauuuna.github.io/CesiumGDPS/CesiumGDPS/';
 const MANIFEST_URL = BASE_URL + 'manifest.json';
 const CONCURRENCY = 8;
 
 let mainWindow;
+let autoCheckUpdatesEnabled = true;
+
+const SETTINGS_PATH = path.join(app.getPath('userData'), 'settings.json');
+
+function loadSettings() {
+    try {
+        if (fs.existsSync(SETTINGS_PATH)) {
+            return JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
+        }
+    } catch (e) { /* ignore */ }
+    return {};
+}
+
+function saveSettings(update) {
+    try {
+        const existing = loadSettings();
+        fs.writeFileSync(SETTINGS_PATH, JSON.stringify({ ...existing, ...update }, null, 2));
+    } catch (e) { /* ignore */ }
+}
 
 const state = {
     isPaused: false,
@@ -39,13 +59,69 @@ const keepAliveAgent = new https.Agent({
     freeSocketTimeout: 20000
 });
 
+// --- Discord RPC ---
+
+const BACKGROUNDS_DIR = path.join(__dirname, 'src', 'backgrounds');
+const clientId = '1526608832116297759';
+try { DiscordRPC.register(clientId); } catch (e) { /* ignore */ }
+let rpc = null;
+let rpcRetryTimer = null;
+const startTimestamp = new Date();
+
+function updateDiscordActivity(state, details) {
+    if (!rpc) return;
+    rpc.setActivity({
+        details: details || 'CesiumGDPS',
+        state: state || 'Idle',
+        startTimestamp,
+        buttons: [
+            { label: 'Discord', url: 'https://discord.gg/jd6EAGpaVg' }
+        ]
+    }).catch(() => {});
+}
+
+function initDiscordRPC() {
+    if (rpc) {
+        try { rpc.destroy(); } catch (e) { /* ignore */ }
+        rpc = null;
+    }
+
+    const newRpc = new DiscordRPC.Client({ transport: 'ipc' });
+
+    newRpc.on('ready', () => {
+        console.log('[main] discord rpc connected');
+        rpc = newRpc;
+        updateDiscordActivity('Просматривает клиент');
+    });
+
+    newRpc.on('disconnected', () => {
+        console.log('[main] discord rpc disconnected');
+        if (rpc === newRpc) rpc = null;
+    });
+
+    newRpc.login({ clientId }).catch((err) => {
+        console.log('[main] discord rpc login failed:', err.message || err);
+        if (rpc === newRpc) rpc = null;
+        try { newRpc.destroy(); } catch (e) { /* ignore */ }
+        rpcRetryTimer = setTimeout(initDiscordRPC, 15000);
+    });
+}
+
 function createWindow() {
+    console.log('[main] create window');
+    const saved = loadSettings();
+    const wb = saved.windowBounds || {};
+
     mainWindow = new BrowserWindow({
-        width: 900,
-        height: 600,
+        width: wb.width || 1100,
+        height: wb.height || 720,
+        x: wb.x,
+        y: wb.y,
         minWidth: 800,
         minHeight: 500,
-        autoHideMenuBar: true,
+        frame: false,
+        titleBarStyle: 'hidden',
+        backgroundColor: '#121212',
         icon: path.join(__dirname, 'build', 'icon.png'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
@@ -53,14 +129,38 @@ function createWindow() {
             contextIsolation: true
         }
     });
+
+    let saveTimeout;
+    const persistBounds = () => {
+        if (saveTimeout) clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(() => {
+            if (mainWindow && !mainWindow.isMaximized()) {
+                saveSettings({ windowBounds: mainWindow.getBounds() });
+            }
+        }, 400);
+    };
+
+    mainWindow.on('resize', persistBounds);
+    mainWindow.on('move', persistBounds);
+
     mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
 }
 
 app.whenReady().then(() => {
+    console.log('[main] app ready v' + app.getVersion());
     createWindow();
     initAutoUpdater();
+    initDiscordRPC();
 });
+
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+
+ipcMain.handle('window:minimize', () => { if (mainWindow) mainWindow.minimize(); });
+ipcMain.handle('window:maximize', () => {
+    if (!mainWindow) return;
+    mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize();
+});
+ipcMain.handle('window:close', () => { if (mainWindow) mainWindow.close(); });
 
 function formatBytes(bytes) {
     if (bytes === 0) return '0 B';
@@ -133,22 +233,27 @@ function getFileHash(filePath) {
     });
 }
 
-function fetchJSON(url) {
+function fetchJSON(url, extraHeaders = {}) {
     return new Promise((resolve, reject) => {
         const parsedUrl = new URL(url);
         const client = parsedUrl.protocol === 'https:' ? https : http;
         const options = {
             hostname: parsedUrl.hostname,
             path: parsedUrl.pathname + parsedUrl.search,
-            headers: { 'User-Agent': 'CesiumLauncher/1.0' }
+            headers: {
+                'User-Agent': 'CesiumLauncher/1.0',
+                ...extraHeaders
+            }
         };
 
         client.get(options, (res) => {
             if (res.statusCode === 301 || res.statusCode === 302) {
-                return fetchJSON(res.headers.location).then(resolve).catch(reject);
+                return fetchJSON(res.headers.location, extraHeaders).then(resolve).catch(reject);
             }
             if (res.statusCode !== 200) {
-                return reject(new Error(`HTTP ${res.statusCode}`));
+                let msg = `HTTP ${res.statusCode}`;
+                if (res.statusCode === 403) msg += ' — превышен лимит запросов, попробуйте позже';
+                return reject(new Error(msg));
             }
 
             let data = '';
@@ -168,6 +273,8 @@ function cleanupRequests() {
     for (const req of state.activeRequests) req.destroy();
     state.activeRequests = [];
 }
+
+// --- Game helpers ---
 
 async function deleteDirectoryWithRetry(dirPath, maxRetries = 5) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -263,27 +370,60 @@ function initAutoUpdater() {
     });
 
     setTimeout(() => {
-        autoUpdater.checkForUpdates().catch(err => {
-            console.warn('Auto-update check failed:', err.message);
-        });
+        if (autoCheckUpdatesEnabled) {
+            autoUpdater.checkForUpdates().catch(err => {
+                console.warn('Auto-update check failed:', err.message);
+            });
+        }
     }, 3000);
 }
 
+let updateCheckCache = { time: 0, result: null };
+const UPDATE_CACHE_TTL = 300000;
+
 ipcMain.handle('client:checkForUpdates', async () => {
     const currentVersion = app.getVersion();
+    const now = Date.now();
+
+    if (updateCheckCache.result && (now - updateCheckCache.time) < UPDATE_CACHE_TTL) {
+        return { ...updateCheckCache.result, currentVersion };
+    }
+
     try {
-        const releases = await fetchJSON('https://api.github.com/repos/Lauuuna/CesiumGDPSClient/releases');
+        const releases = await fetchJSON('https://api.github.com/repos/Lauuuna/CesiumGDPSClient/releases', {
+            'Accept': 'application/vnd.github.v3+json'
+        });
         const latest = releases.find(r => !r.draft && !r.prerelease && r.tag_name);
-        if (!latest) return { currentVersion, available: false, error: 'Релизы не найдены' };
+        if (!latest) {
+            const result = { currentVersion, available: false, error: 'Релизы не найдены' };
+            updateCheckCache = { time: now, result };
+            return result;
+        }
 
         const remoteVersion = latest.tag_name.replace(/^v/, '');
-        if (remoteVersion !== currentVersion) {
-            return { currentVersion, remoteVersion, available: true };
-        }
-        return { currentVersion, remoteVersion, available: false };
+        const result = {
+            currentVersion,
+            remoteVersion,
+            available: remoteVersion !== currentVersion
+        };
+        updateCheckCache = { time: now, result };
+        return result;
     } catch (err) {
+        if (updateCheckCache.result) {
+            return { ...updateCheckCache.result, currentVersion };
+        }
         return { currentVersion, available: false, error: err.message };
     }
+});
+
+// --- IPC: app lifecycle ---
+
+ipcMain.handle('auto-updater:setEnabled', (event, enabled) => {
+    autoCheckUpdatesEnabled = enabled;
+});
+
+ipcMain.handle('rpc:setActivity', (event, { state, details }) => {
+    updateDiscordActivity(state, details);
 });
 
 ipcMain.handle('shell:openExternal', (event, url) => {
@@ -294,17 +434,24 @@ ipcMain.handle('app:restart', () => {
     autoUpdater.quitAndInstall();
 });
 
+// --- IPC: game management ---
+
 ipcMain.handle('game:checkInstall', (event, installDir) => {
-    return fs.existsSync(path.join(installDir, 'CesiumGDPS.exe'));
+    const exists = fs.existsSync(path.join(installDir, 'CesiumGDPS.exe'));
+    console.log('[main] checkInstall:', installDir, exists);
+    return exists;
 });
 
 ipcMain.handle('game:checkUpdate', async (event, installDir) => {
+    console.log('[main] checkUpdate:', installDir);
     try {
         const manifest = await fetchJSON(MANIFEST_URL);
         const remoteVersion = manifest.version || '0.0.0';
         const localVersion = getLocalVersion(installDir);
+        console.log('[main] checkUpdate: local', localVersion, 'remote', remoteVersion);
         return { updateAvailable: remoteVersion !== localVersion, remoteVersion, localVersion };
     } catch (error) {
+        console.log('[main] checkUpdate: error', error.message);
         return { updateAvailable: false, error: error.message };
     }
 });
@@ -405,7 +552,7 @@ ipcMain.handle('game:verifyIntegrity', async (event, installDir) => {
             checked++;
             const pct = Math.round((checked / total) * 100);
             event.sender.send('update-progress', {
-                text: `Проверка целостности (${checked}/${total})`,
+                text: `Проверка целостности игры (${checked}/${total})`,
                 percent: pct
             });
         }
@@ -422,7 +569,16 @@ ipcMain.handle('game:verifyIntegrity', async (event, installDir) => {
 
 ipcMain.handle('dialog:selectDirectory', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'] });
-    return canceled ? null : filePaths[0];
+    if (canceled) return null;
+    
+    const selectedPath = filePaths[0];
+    
+    if (selectedPath.includes(' ')) {
+        dialog.showErrorBox('Недопустимый путь', 'Путь установки не должен содержать пробелы в целях безопасности. Пожалуйста, выберите другую папку.');
+        return null;
+    }
+    
+    return selectedPath;
 });
 
 ipcMain.handle('game:pause', () => {
@@ -435,6 +591,7 @@ ipcMain.handle('game:resume', () => {
 });
 
 ipcMain.handle('game:startUpdate', async (event, installDir, skipCheck) => {
+    console.log('[main] startUpdate:', installDir, 'skipCheck:', skipCheck);
     try {
         state.isPaused = false;
         state.activeRequests = [];
@@ -580,8 +737,120 @@ ipcMain.handle('game:startUpdate', async (event, installDir, skipCheck) => {
     }
 });
 
+const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.webp'];
+
+ipcMain.handle('client:fetchLocalBackground', async () => {
+    try {
+        if (!fs.existsSync(BACKGROUNDS_DIR)) {
+            return { error: 'backgrounds directory not found' };
+        }
+        const files = fs.readdirSync(BACKGROUNDS_DIR)
+            .filter(f => IMAGE_EXTS.includes(path.extname(f).toLowerCase()));
+        if (files.length === 0) {
+            return { error: 'no images in backgrounds folder' };
+        }
+
+        const saved = loadSettings();
+        const enabledBgMap = saved.enabledBackgrounds || {};
+        const pool = files.filter(f => enabledBgMap[f] !== false);
+        if (pool.length === 0) {
+            return { error: 'no enabled backgrounds' };
+        }
+
+        const file = path.join(BACKGROUNDS_DIR, pool[Math.floor(Math.random() * pool.length)]);
+        const data = fs.readFileSync(file);
+        const ext = path.extname(file).toLowerCase();
+        const mime = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+        console.log('[main] background: loaded', path.basename(file));
+        return { dataUrl: `data:${mime};base64,${data.toString('base64')}` };
+    } catch (err) {
+        return { error: err.message };
+    }
+});
+
+ipcMain.handle('client:listBackgrounds', () => {
+    try {
+        if (!fs.existsSync(BACKGROUNDS_DIR)) {
+            return { backgrounds: [] };
+        }
+        const files = fs.readdirSync(BACKGROUNDS_DIR)
+            .filter(f => IMAGE_EXTS.includes(path.extname(f).toLowerCase()))
+            .sort();
+
+        const saved = loadSettings();
+        const enabledBgMap = saved.enabledBackgrounds || {};
+
+        return {
+            backgrounds: files.map(name => ({
+                name,
+                enabled: enabledBgMap[name] !== false
+            }))
+        };
+    } catch (err) {
+        return { error: err.message, backgrounds: [] };
+    }
+});
+
+ipcMain.handle('client:toggleBackground', (event, { name, enabled }) => {
+    try {
+        const saved = loadSettings();
+        const enabledBgMap = saved.enabledBackgrounds || {};
+        enabledBgMap[name] = enabled;
+        saveSettings({ enabledBackgrounds: enabledBgMap });
+        return { success: true };
+    } catch (err) {
+        return { error: err.message };
+    }
+});
+
+ipcMain.handle('client:getBackgroundFile', async (event, filename) => {
+    try {
+        const filePath = path.join(BACKGROUNDS_DIR, filename);
+        if (!fs.existsSync(filePath)) return { error: 'file not found' };
+        const ext = path.extname(filePath).toLowerCase();
+        const mime = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+        const data = fs.readFileSync(filePath);
+        return { dataUrl: `data:${mime};base64,${data.toString('base64')}` };
+    } catch (err) {
+        return { error: err.message };
+    }
+});
+
+ipcMain.handle('client:importBackground', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+        properties: ['openFile'],
+        filters: [{ name: 'Изображения', extensions: ['jpg', 'jpeg', 'png', 'webp'] }]
+    });
+    if (canceled || filePaths.length === 0) return { error: 'cancelled' };
+
+    const srcPath = filePaths[0];
+    const ext = path.extname(srcPath).toLowerCase();
+    if (!IMAGE_EXTS.includes(ext)) {
+        return { error: 'Неподдерживаемый формат изображения' };
+    }
+
+    const baseName = path.basename(srcPath);
+    let name = baseName;
+    let destPath = path.join(BACKGROUNDS_DIR, name);
+    let counter = 1;
+    while (fs.existsSync(destPath)) {
+        const parsed = path.parse(baseName);
+        name = `${parsed.name}_${counter}${parsed.ext}`;
+        destPath = path.join(BACKGROUNDS_DIR, name);
+        counter++;
+    }
+
+    try {
+        fs.copyFileSync(srcPath, destPath);
+        return { success: true, name };
+    } catch (err) {
+        return { error: err.message };
+    }
+});
+
 ipcMain.handle('game:launch', (event, installDir) => {
     const exePath = path.join(installDir, 'CesiumGDPS.exe');
+    console.log('[main] launch:', exePath);
     if (!fs.existsSync(exePath)) {
         dialog.showErrorBox('Ошибка', 'CesiumGDPS.exe не найден!');
         return false;
