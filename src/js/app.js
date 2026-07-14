@@ -806,13 +806,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (localStorage.getItem('justUpdated') === 'true') {
         localStorage.removeItem('justUpdated');
-        alert('Установлена актуальная версия клиента.');
     }
 
     window.api.onAutoUpdaterStatus((data) => {
-        if (data.status === 'downloaded') {
-            localStorage.setItem('justUpdated', 'true');
-            window.api.restartAndUpdate();
+        if (data.status === 'not-available' || data.status === 'downloaded') {
+            console.log('Auto-updater:', data.status);
         }
     });
 

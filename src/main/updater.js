@@ -42,6 +42,7 @@ class AutoUpdater {
     autoUpdater.on('update-downloaded', (info) => {
       logger.info('Auto-updater: update downloaded', info.version);
       this._send('auto-updater:status', { status: 'downloaded', info });
+      setTimeout(() => autoUpdater.quitAndInstall(), 1000);
     });
 
     autoUpdater.on('error', (err) => {
