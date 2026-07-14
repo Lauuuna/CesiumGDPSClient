@@ -270,13 +270,19 @@ function initAutoUpdater() {
 }
 
 ipcMain.handle('client:checkForUpdates', async () => {
+    const currentVersion = app.getVersion();
     try {
-        const result = await autoUpdater.checkForUpdates();
-        const currentVersion = app.getVersion();
-        const updateVersion = result.updateInfo.version;
-        return { currentVersion, updateVersion, available: updateVersion !== currentVersion };
+        const releases = await fetchJSON('https://api.github.com/repos/Lauuuna/CesiumGDPSClient/releases');
+        const latest = releases.find(r => !r.draft && !r.prerelease && r.tag_name);
+        if (!latest) return { currentVersion, available: false, error: 'Релизы не найдены' };
+
+        const remoteVersion = latest.tag_name.replace(/^v/, '');
+        if (remoteVersion !== currentVersion) {
+            return { currentVersion, remoteVersion, available: true };
+        }
+        return { currentVersion, remoteVersion, available: false };
     } catch (err) {
-        return { available: false, error: err.message };
+        return { currentVersion, available: false, error: err.message };
     }
 });
 
