@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const settingsClose = document.getElementById('settings-close');
     const discordBtn = document.getElementById('discord-btn');
     const checkUpdatesBtn = document.getElementById('check-updates-btn');
+    const checkClientUpdatesBtn = document.getElementById('check-client-updates-btn');
     const deleteGameBtn = document.getElementById('delete-game-btn');
     const verifyIntegrityBtn = document.getElementById('verify-integrity-btn');
     const skipCheckToggle = document.getElementById('skip-check-toggle');
@@ -37,6 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
         changeDirBtn.disabled = blocked;
         settingsBtn.disabled = blocked;
         checkUpdatesBtn.disabled = blocked;
+        checkClientUpdatesBtn.disabled = blocked;
         deleteGameBtn.disabled = blocked;
         verifyIntegrityBtn.disabled = blocked;
     }
@@ -217,13 +219,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             if (result.updateAvailable) {
-                alert(`Доступно обновление: ${result.localVersion} → ${result.remoteVersion}`);
+                alert(`Доступно обновление игры: ${result.localVersion} → ${result.remoteVersion}`);
                 await checkInstallStatus();
             } else {
-                alert('Установлена актуальная версия.');
+                alert('Установлена актуальная версия игры.');
             }
         } catch (err) {
-            alert('Не удалось проверить обновления.');
+            alert('Не удалось проверить обновления игры.');
+        }
+    });
+
+    checkClientUpdatesBtn.addEventListener('click', async () => {
+        settingsOverlay.classList.remove('active');
+        try {
+            const result = await window.api.checkForClientUpdates();
+            if (result.error) {
+                alert('Ошибка проверки обновлений клиента: ' + result.error);
+                return;
+            }
+            if (result.available) {
+                alert(`Доступно обновление клиента: ${result.currentVersion} → ${result.updateVersion}`);
+            } else {
+                alert(`Установлена актуальная версия клиента (${result.currentVersion}).`);
+            }
+        } catch (err) {
+            alert('Не удалось проверить обновления клиента.');
         }
     });
 
@@ -323,5 +343,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    window.api.onAutoUpdaterError(() => {});
+    window.api.onAutoUpdaterError((err) => {
+        console.warn('Auto-updater error:', err);
+    });
 });

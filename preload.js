@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('api', {
     onUpdateState: (callback) => ipcRenderer.on('update-state', (event, state) => callback(state)),
     onGameClosed: (callback) => ipcRenderer.on('game:closed', (event, code) => callback(code)),
 
+    checkForClientUpdates: () => ipcRenderer.invoke('client:checkForUpdates'),
     openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
     restartAndUpdate: () => ipcRenderer.invoke('app:restart'),
 

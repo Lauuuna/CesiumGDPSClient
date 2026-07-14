@@ -263,9 +263,22 @@ function initAutoUpdater() {
     });
 
     setTimeout(() => {
-        autoUpdater.checkForUpdates();
+        autoUpdater.checkForUpdates().catch(err => {
+            console.warn('Auto-update check failed:', err.message);
+        });
     }, 3000);
 }
+
+ipcMain.handle('client:checkForUpdates', async () => {
+    try {
+        const result = await autoUpdater.checkForUpdates();
+        const currentVersion = app.getVersion();
+        const updateVersion = result.updateInfo.version;
+        return { currentVersion, updateVersion, available: updateVersion !== currentVersion };
+    } catch (err) {
+        return { available: false, error: err.message };
+    }
+});
 
 ipcMain.handle('shell:openExternal', (event, url) => {
     shell.openExternal(url);
