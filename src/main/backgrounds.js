@@ -22,12 +22,13 @@ class BackgroundsManager {
         return { error: 'no enabled backgrounds' };
       }
 
-      const file = path.join(config.BACKGROUNDS_DIR, pool[Math.floor(Math.random() * pool.length)]);
+      const chosenFile = pool[Math.floor(Math.random() * pool.length)];
+      const file = path.join(config.BACKGROUNDS_DIR, chosenFile);
       const data = fs.readFileSync(file);
       const ext = path.extname(file).toLowerCase();
       const mime = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
-      logger.debug('Background: loaded', path.basename(file));
-      return { dataUrl: `data:${mime};base64,${data.toString('base64')}` };
+      logger.debug('Background: loaded', chosenFile);
+      return { dataUrl: `data:${mime};base64,${data.toString('base64')}`, name: chosenFile };
     } catch (err) {
       logger.error('Background fetch failed:', err.message);
       return { error: err.message };

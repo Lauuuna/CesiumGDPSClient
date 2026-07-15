@@ -4,42 +4,73 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; script-src 'self';">
     <title>CesiumClient</title>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="./css/style.css">
 </head>
 <body>
 
-    <div class="titlebar">
-        <div class="titlebar-title">CesiumClient</div>
-        <div class="titlebar-controls">
+    <!-- ═══════════════ TITLEBAR ═══════════════ -->
+    <header class="titlebar">
+        <div class="titlebar-brand">
+            <span class="titlebar-name"><span class="titlebar-name-accent">CESIUM</span><span class="titlebar-name-light">CLIENT</span></span>
+        </div>
+
+        <div class="titlebar-actions">
+            <button class="titlebar-icon-btn" id="discord-btn" title="Discord">
+                <!-- Discord brand mark — kept as-is, it's a brand logo not AI-generated -->
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
+                    <path d="M19.73 4.87a16.5 16.5 0 0 0-4.14-1.27c-.18.33-.38.77-.52 1.12a15.3 15.3 0 0 0-4.59 0c-.14-.35-.34-.79-.52-1.12a16.47 16.47 0 0 0-4.14 1.27C3.74 9.34 2.85 13.68 3.22 17.94a16.66 16.66 0 0 0 5.07 2.56c.41-.56.78-1.15 1.1-1.77a10.8 10.8 0 0 1-1.73-.83c.14-.1.28-.21.41-.32a11.86 11.86 0 0 0 10.16 0c.14.11.28.22.41.32-.55.33-1.13.61-1.74.83.32.62.69 1.21 1.1 1.77a16.58 16.58 0 0 0 5.07-2.56c.43-4.93-.71-9.22-3.03-13.07ZM8.87 15.3c-1 0-1.82-.93-1.82-2.06s.79-2.06 1.82-2.06 1.84.93 1.82 2.06c.02 1.13-.79 2.06-1.82 2.06Zm6.32 0c-1 0-1.82-.93-1.82-2.06s.79-2.06 1.82-2.06 1.84.93 1.82 2.06c.02 1.13-.8 2.06-1.82 2.06Z"/>
+                </svg>
+            </button>
+
+            <button class="titlebar-icon-btn" id="dashboard-btn" title="Dashboard">
+                <!-- Dashboard — 4-pane grid icon, clean geometric -->
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="8" height="8" rx="1.5"/>
+                    <rect x="13" y="3" width="8" height="8" rx="1.5"/>
+                    <rect x="3" y="13" width="8" height="8" rx="1.5"/>
+                    <rect x="13" y="13" width="8" height="8" rx="1.5"/>
+                </svg>
+            </button>
+
+            <div class="titlebar-sep titlebar-sep--group"></div>
+
+            <button class="titlebar-icon-btn" id="settings-btn" title="Настройки">
+                <!-- Craftwork-style sliders — no more "sun" gear -->
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="6" cy="5" r="1.8"/>
+                    <path d="M7.8 5H21"/>
+                    <path d="M3 5h2.2"/>
+                    <circle cx="12" cy="12" r="1.8"/>
+                    <path d="M13.8 12H21"/>
+                    <path d="M3 12h8.2"/>
+                    <circle cx="16" cy="19" r="1.8"/>
+                    <path d="M17.8 19H21"/>
+                    <path d="M3 19h12.2"/>
+                </svg>
+            </button>
+
+            <div class="titlebar-sep"></div>
+
             <button class="titlebar-btn" id="btn-minimize">
-                <svg viewBox="0 0 10 1" width="10" height="1"><rect width="10" height="1" fill="currentColor"/></svg>
+                <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 8h10"/></svg>
             </button>
             <button class="titlebar-btn" id="btn-maximize">
-                <svg viewBox="0 0 10 10" width="10" height="10"><rect width="8" height="8" x="1" y="1" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+                <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="10" height="10" rx="1.5"/></svg>
             </button>
             <button class="titlebar-btn btn-close" id="btn-close">
-                <svg viewBox="0 0 10 10" width="10" height="10"><path d="M1,1 L9,9 M9,1 L1,9" stroke="currentColor" stroke-width="1.5"/></svg>
+                <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 4l8 8"/><path d="M12 4L4 12"/></svg>
             </button>
         </div>
-    </div>
+    </header>
 
+    <div class="noise-overlay" aria-hidden="true"></div>
+
+    <!-- ═══════════════ BACKGROUND ═══════════════ -->
     <div class="dynamic-bg" id="dynamic-bg"></div>
 
-    <div class="logo">CesiumClient</div>
-
-    <button class="discord-btn" id="discord-btn" title="Discord">
-        <svg viewBox="0 0 127.14 96.36" width="20" height="20">
-            <path fill="currentColor" d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z"/>
-        </svg>
-    </button>
-
-    <button class="settings-btn" id="settings-btn" title="Настройки">&#9881;</button>
-
+    <!-- ═══════════════ COLOR PICKER POPUP ═══════════════ -->
     <div class="cp-backdrop" id="cp-backdrop"></div>
-    <div class="bg-preview-tooltip" id="bg-preview-tooltip">
-        <img id="bg-preview-img" alt="">
-    </div>
+
     <div class="cp-popup" id="cp-popup">
         <div class="cp-sv-wrap">
             <canvas id="cp-canvas" width="200" height="150"></canvas>
@@ -56,19 +87,37 @@
         </div>
     </div>
 
+    <!-- ═══════════════ BACKGROUND PREVIEW TOOLTIP ═══════════════ -->
+    <div class="bg-preview-tooltip" id="bg-preview-tooltip">
+        <img id="bg-preview-img" alt="">
+    </div>
+
+    <!-- ═══════════════ SETTINGS OVERLAY ═══════════════ -->
     <div class="settings-overlay" id="settings-overlay">
-        <div class="settings-modal">
+        <div class="settings-modal" id="settings-modal">
             <div class="settings-header">
                 <span>Настройки</span>
-                <button class="settings-close" id="settings-close">&times;</button>
+                <button class="settings-close" id="settings-close">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+                        <path d="M6 6l12 12"/><path d="M18 6L6 18"/>
+                    </svg>
+                </button>
             </div>
             <div class="settings-body">
-                <div class="settings-sidebar">
-                    <button class="settings-cat active" data-cat="general">Основное</button>
-                    <button class="settings-cat" data-cat="appearance">Внешний вид</button>
-                    <button class="settings-cat" data-cat="about">О клиенте</button>
-                </div>
+                <nav class="settings-sidebar">
+                    <button class="settings-cat active" data-cat="general">
+                        <span>Основное</span>
+                    </button>
+                    <button class="settings-cat" data-cat="appearance">
+                        <span>Кастомизация</span>
+                    </button>
+                    <button class="settings-cat" data-cat="about">
+                        <span>Информация</span>
+                    </button>
+                </nav>
+
                 <div class="settings-content">
+                    <!-- General -->
                     <div class="settings-panel active" id="panel-general">
                         <div class="settings-toggle-row">
                             <span>Проверять файлы при обновлении</span>
@@ -84,11 +133,23 @@
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
-                        <button class="settings-option" id="check-updates-btn">Проверить обновления игры</button>
-                        <button class="settings-option" id="check-client-updates-btn">Проверить обновления клиента</button>
-                        <button class="settings-option" id="verify-integrity-btn" style="display:none;">Проверить целостность игры</button>
-                        <button class="settings-option settings-option-danger" id="delete-game-btn">Удалить игру</button>
+                        <div class="settings-spacer"></div>
+                        <button class="settings-option" id="check-updates-btn">
+                            Проверить обновления игры
+                        </button>
+                        <button class="settings-option" id="check-client-updates-btn">
+                            Проверить обновления клиента
+                        </button>
+                        <button class="settings-option" id="verify-integrity-btn" style="display:none;">
+                            Проверить целостность игры
+                        </button>
+                        <div class="danger-separator"></div>
+                        <button class="settings-option settings-option-danger" id="delete-game-btn">
+                            Удалить игру
+                        </button>
                     </div>
+
+                    <!-- Appearance -->
                     <div class="settings-panel" id="panel-appearance">
                         <div class="settings-toggle-row">
                             <span>Динамический фон</span>
@@ -108,49 +169,84 @@
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
-                        <div class="settings-section-header">Управление фонами</div>
+                        <div class="settings-toggle-row">
+                            <span>Затемнение фона</span>
+                            <div class="dim-slider-wrap">
+                                <input type="range" class="dim-slider" id="bg-dim-slider" min="0" max="100" value="100" step="1">
+                            </div>
+                        </div>
+                        <div class="settings-toggle-row">
+                            <span>Анимации интерфейса</span>
+                            <label class="toggle">
+                                <input type="checkbox" id="animations-toggle" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="settings-spacer"></div>
+                        <p class="backgrounds-hint">Выберите изображения, которые будут сменять друг друга при запуске клиента. Работает с включенным динамическим фоном.</p>
                         <div class="backgrounds-list" id="backgrounds-list"></div>
-                        <button class="settings-option" id="import-bg-btn">Загрузить фон</button>
+                        <button class="settings-option" id="import-bg-btn">
+                            Добавить фон
+                        </button>
                     </div>
+
+                    <!-- About -->
                     <div class="settings-panel" id="panel-about">
                         <div class="about-content">
                             <p>CesiumClient постоянно совершенствуется, но это не точно.</p>
-                            <p class="about-version">Текущая версия: v1.0.3</p>
+                            <p class="about-version">Текущая версия: v1.0.4</p>
                         </div>
-                        <div class="settings-section-header">Статистика</div>
+                        <div class="settings-spacer"></div>
                         <div class="stats-content" id="stats-content">
                             <p class="stats-empty">Загрузка...</p>
                         </div>
-                        <button class="settings-option settings-option-danger" id="reset-stats-btn">Сбросить статистику</button>
+                        <div class="danger-separator"></div>
+                        <button class="settings-option settings-option-danger" id="reset-stats-btn">
+                            Сбросить статистику
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="directory-container">
-        <div class="dir-label">ПУТЬ УСТАНОВКИ</div>
-        <div class="dir-path-wrapper">
-            <div class="dir-path" id="install-path" title="C:\Games\CesiumGD">C:\Games\CesiumGD</div>
-            <button class="change-dir-btn" id="change-dir-btn">ИЗМЕНИТЬ</button>
-            <button class="reset-dir-btn" id="reset-dir-btn" title="Сбросить">&#8635;</button>
+    <!-- ═══════════════ LAUNCHER FOOTER ═══════════════ -->
+    <footer class="launcher-footer">
+        <div class="footer-left">
+            <div class="directory-container">
+                <div class="dir-path-wrapper">
+                    <!-- Craftwork-style folder — simple geometric shape -->
+                    <svg class="dir-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M2 5.5h7l2 2h11v11a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5.5z"/>
+                    </svg>
+                    <div class="dir-path" id="install-path" title="Нажмите, чтобы изменить путь установки">C:\Games\CesiumGD</div>
+                    <button class="reset-dir-btn" id="reset-dir-btn" title="Сбросить путь">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 3.5v5h5"/><path d="M21 20.5v-5h-5"/>
+                            <path d="M5.5 4.5a8.5 8.5 0 0 1 13 2.6M5.5 16.9a8.5 8.5 0 0 0 13-2.6"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
         </div>
-    </div>
 
-    <div class="progress-container" id="progress-container">
-        <div class="progress-text" id="progress-text"></div>
-        <div class="progress-bar-bg">
-            <div class="progress-bar-fill" id="progress-bar-fill"></div>
+        <div class="footer-center">
+            <div class="progress-container" id="progress-container">
+                <div class="progress-text" id="progress-text"></div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill" id="progress-bar-fill"></div>
+                </div>
+            </div>
         </div>
-    </div>
 
-    <div class="button-group">
-        <button class="action-btn action-btn-secondary" id="update-btn" style="display:none;">ОБНОВИТЬ</button>
-        <button class="action-btn action-btn-cancel" id="cancel-btn" style="display:none;">ОТМЕНА</button>
-        <button class="action-btn" id="main-btn">СКАЧАТЬ</button>
-    </div>
-
-
+        <div class="footer-right">
+            <div class="button-group">
+                <button class="action-btn action-btn-secondary" id="update-btn" style="display:none;">Обновить</button>
+                <button class="action-btn action-btn-cancel" id="cancel-btn" style="display:none;">Отмена</button>
+                <button class="action-btn" id="main-btn">Скачать</button>
+            </div>
+        </div>
+    </footer>
 
     <script src="./js/app.js"></script>
 </body>

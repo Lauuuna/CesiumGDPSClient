@@ -20,6 +20,7 @@ const config = {
   DEFAULT_INSTALL_PATH: 'C:\\Games\\CesiumGD',
   BUILD_ICON: path.join(ROOT, 'build', 'icon.png'),
   PRELOAD_PATH: path.join(ROOT, 'preload.js'),
+  DASHBOARD_PRELOAD_PATH: path.join(ROOT, 'src', 'dashboard-preload.js'),
   INDEX_HTML: path.join(ROOT, 'src', 'index.html'),
   BACKGROUNDS_DIR: path.join(ROOT, 'src', 'backgrounds'),
 };

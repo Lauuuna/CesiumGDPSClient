@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('api', {
   resetPlayStats: () => ipcRenderer.invoke('stats:reset'),
 
   setRpcActivity: (activity) => ipcRenderer.invoke('rpc:setActivity', activity),
+  focusDashboard: () => ipcRenderer.invoke('dashboard:focus'),
   fetchLocalBackground: () => ipcRenderer.invoke('client:fetchLocalBackground'),
   listBackgrounds: () => ipcRenderer.invoke('client:listBackgrounds'),
   toggleBackground: (name, enabled) => ipcRenderer.invoke('client:toggleBackground', { name, enabled }),

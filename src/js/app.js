@@ -8,15 +8,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const cancelBtn = document.getElementById('cancel-btn');
     const updateBtn = document.getElementById('update-btn');
     const installPathEl = document.getElementById('install-path');
-    const changeDirBtn = document.getElementById('change-dir-btn');
     const resetDirBtn = document.getElementById('reset-dir-btn');
     const progressContainer = document.getElementById('progress-container');
     const progressText = document.getElementById('progress-text');
     const progressBarFill = document.getElementById('progress-bar-fill');
     const settingsBtn = document.getElementById('settings-btn');
     const settingsOverlay = document.getElementById('settings-overlay');
+    const settingsModal = document.getElementById('settings-modal');
     const settingsClose = document.getElementById('settings-close');
     const discordBtn = document.getElementById('discord-btn');
+    const dashboardBtn = document.getElementById('dashboard-btn');
     const checkUpdatesBtn = document.getElementById('check-updates-btn');
     const checkClientUpdatesBtn = document.getElementById('check-client-updates-btn');
     const deleteGameBtn = document.getElementById('delete-game-btn');
@@ -28,6 +29,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const adaptBgRow = document.getElementById('adapt-bg-row');
     const statsContent = document.getElementById('stats-content');
     const resetStatsBtn = document.getElementById('reset-stats-btn');
+
+    const animationsToggle = document.getElementById('animations-toggle');
+    let useAnimations = localStorage.getItem('useAnimations') !== 'false';
+    animationsToggle.checked = useAnimations;
+    document.documentElement.classList.toggle('reduce-motion', !useAnimations);
 
     const cpBackdrop = document.getElementById('cp-backdrop');
     const cpPopup = document.getElementById('cp-popup');
@@ -69,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updatePathDisplay() {
         installPathEl.textContent = currentInstallPath;
-        installPathEl.title = currentInstallPath;
+        installPathEl.title = 'Нажмите, чтобы изменить путь установки';
     }
     updatePathDisplay();
 
@@ -89,11 +95,21 @@ document.addEventListener('DOMContentLoaded', () => {
     let useDynamicBg = localStorage.getItem('useDynamicBg') !== 'false';
     dynamicBgToggle.checked = useDynamicBg;
 
+    let activeBgName = null;
+    let bgDimLevel = parseFloat(localStorage.getItem('bgDimLevel')) ?? 1;
+    const bgDimSlider = document.getElementById('bg-dim-slider');
+    bgDimSlider.value = Math.round(bgDimLevel * 100);
+    document.documentElement.style.setProperty('--bg-dim', bgDimLevel);
+
     function loadLocalBackground() {
         window.api.fetchLocalBackground().then((result) => {
             if (result.error || !result.dataUrl) return;
             dynamicBgEl.style.backgroundImage = `url('${result.dataUrl}')`;
             dynamicBgEl.style.opacity = 1;
+            if (result.name) {
+                activeBgName = result.name;
+                updateBackgroundHighlight();
+            }
             if (adaptToBg) updateAdaptation();
         });
     }
@@ -119,7 +135,68 @@ document.addEventListener('DOMContentLoaded', () => {
         if (adaptToBg) updateAdaptation();
     });
 
-    // ----- colour picker -----
+    bgDimSlider.addEventListener('input', () => {
+        bgDimLevel = bgDimSlider.value / 100;
+        localStorage.setItem('bgDimLevel', bgDimLevel);
+        document.documentElement.style.setProperty('--bg-dim', bgDimLevel);
+    });
+
+    animationsToggle.addEventListener('change', () => {
+        useAnimations = animationsToggle.checked;
+        localStorage.setItem('useAnimations', useAnimations);
+        document.documentElement.classList.toggle('reduce-motion', !useAnimations);
+    });
+
+    // ── Glass update — accent-aware ──
+
+    function updateGlassFromAccent(hex) {
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+
+        document.documentElement.style.setProperty('--accent-r', r);
+        document.documentElement.style.setProperty('--accent-g', g);
+        document.documentElement.style.setProperty('--accent-b', b);
+
+        // Subtle glass — barely tinted with accent
+        const glassBg = `rgba(${r}, ${g}, ${b}, 0.05)`;
+        const glassBorder = `rgba(${r}, ${g}, ${b}, 0.07)`;
+        const glassShadow = `0 4px 30px rgba(0, 0, 0, 0.18)`;
+
+        document.documentElement.style.setProperty('--glass-bg', glassBg);
+        document.documentElement.style.setProperty('--glass-border', glassBorder);
+        document.documentElement.style.setProperty('--glass-shadow', glassShadow);
+    }
+
+    // ── Settings open/close — blur + brightness overshoot ──
+
+    let settingsClosing = false;
+
+    function openSettings() {
+        settingsClosing = false;
+        settingsModal.classList.remove('focus-out');
+        settingsModal.classList.add('focus-in');
+        settingsOverlay.classList.add('active');
+    }
+
+    function closeSettings() {
+        if (settingsClosing) return;
+        settingsClosing = true;
+
+        settingsModal.classList.remove('focus-in');
+        settingsModal.classList.add('focus-out');
+
+        // After the dissolve animation completes, hide the overlay
+        const onAnimEnd = () => {
+            settingsModal.removeEventListener('animationend', onAnimEnd);
+            settingsOverlay.classList.remove('active');
+            settingsModal.classList.remove('focus-out');
+            settingsClosing = false;
+        };
+        settingsModal.addEventListener('animationend', onAnimEnd);
+    }
+
+    // ── colour picker ──
 
     function hexToHsv(hex) {
         const r = parseInt(hex.slice(1,3),16)/255, g = parseInt(hex.slice(3,5),16)/255, b = parseInt(hex.slice(5,7),16)/255;
@@ -140,10 +217,88 @@ document.addEventListener('DOMContentLoaded', () => {
         return '#'+[r,g,b].map(c=>Math.round(Math.min(c*255,255)).toString(16).padStart(2,'0')).join('');
     }
 
+    /**
+     * Generate accent palette from a single hex colour.
+     */
+    function generateAccentPalette(hex) {
+        const r = parseInt(hex.slice(1,3),16)/255;
+        const g = parseInt(hex.slice(3,5),16)/255;
+        const b = parseInt(hex.slice(5,7),16)/255;
+
+        const mx = Math.max(r,g,b), mn = Math.min(r,g,b);
+        const l = (mx+mn)/2;
+        let h = 0, s = 0;
+        if (mx !== mn) {
+            const d = mx-mn;
+            s = l > 0.5 ? d/(2-mx-mn) : d/(mx+mn);
+            h = mx===r ? ((g-b)/d+(g<b?6:0))/6 :
+                mx===g ? ((b-r)/d+2)/6 :
+                         ((r-g)/d+4)/6;
+        }
+        const hDeg = Math.round(h*360);
+        const sPct = Math.round(s*100);
+        const lPct = Math.round(l*100);
+
+        const hue2rgb = (p, q, t) => {
+            if (t<0) t+=1; if (t>1) t-=1;
+            if (t<1/6) return p+(q-p)*6*t;
+            if (t<1/2) return q;
+            if (t<2/3) return p+(q-p)*(2/3-t)*6;
+            return p;
+        };
+        const hslToHex = (hh, ss, ll) => {
+            const sl=ss/100, llv=ll/100;
+            if (sl===0) {
+                const v=Math.round(llv*255);
+                return '#'+[v,v,v].map(c=>c.toString(16).padStart(2,'0')).join('');
+            }
+            const q = llv<0.5 ? llv*(1+sl) : llv+sl-llv*sl;
+            const pp = 2*llv-q;
+            return '#'+[
+                Math.round(hue2rgb(pp,q,hh/360+1/3)*255),
+                Math.round(hue2rgb(pp,q,hh/360)*255),
+                Math.round(hue2rgb(pp,q,hh/360-1/3)*255)
+            ].map(c=>Math.min(c,255).toString(16).padStart(2,'0')).join('');
+        };
+
+        const brightL = Math.max(lPct, 55);
+        const brightS = Math.max(sPct, 70);
+        const vividS   = Math.min(Math.round(sPct*1.3), 100);
+        const vividL   = Math.max(lPct, 45);
+        const mutedS   = Math.round(sPct*0.5);
+        const mutedL   = Math.min(Math.round(lPct*0.6), 22);
+
+        const brightHex = hslToHex(hDeg, brightS, brightL);
+        const vividHex  = hslToHex(hDeg, vividS, vividL);
+        const mutedHex  = hslToHex(hDeg, mutedS, mutedL);
+
+        // Clamp accent to min 48% lightness so it's always readable on dark glass
+        const accentL = Math.max(lPct, 48);
+        const accentS = Math.max(sPct, 35);
+        const accentHex = hslToHex(hDeg, accentS, accentL);
+
+        const br = parseInt(brightHex.slice(1,3),16);
+        const bg = parseInt(brightHex.slice(3,5),16);
+        const bb = parseInt(brightHex.slice(5,7),16);
+        const glow = `rgba(${br}, ${bg}, ${bb}, 0.30)`;
+
+        return {
+            '--accent':        accentHex,
+            '--accent-bright': brightHex,
+            '--accent-vivid':  vividHex,
+            '--accent-muted':  mutedHex,
+            '--accent-glow':   glow,
+        };
+    }
+
     function applyAccentColor(color) {
-        document.documentElement.style.setProperty('--accent', color);
+        const palette = generateAccentPalette(color);
+        Object.entries(palette).forEach(([prop, val]) => {
+            document.documentElement.style.setProperty(prop, val);
+        });
         settingsColorCircle.style.background = color;
         cpHexInput.value = color.toUpperCase();
+        updateGlassFromAccent(color);
     }
 
     function drawSvCanvas() {
@@ -193,8 +348,13 @@ document.addEventListener('DOMContentLoaded', () => {
         colorPickerRow.style.cursor = disabled ? 'default' : 'pointer';
     }
 
+    let colorPickerClosing = false;
+
     function showColorPopup(triggerEl) {
         if (adaptToBg) return;
+        colorPickerClosing = false;
+        cpPopup.classList.remove('focus-out');
+        cpPopup.classList.add('focus-in');
         cpPopup.classList.add('active');
         cpBackdrop.classList.add('active');
 
@@ -211,8 +371,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function hideColorPopup() {
-        cpPopup.classList.remove('active');
+        if (colorPickerClosing) return;
+        colorPickerClosing = true;
+
+        cpPopup.classList.remove('focus-in');
+        cpPopup.classList.add('focus-out');
         cpBackdrop.classList.remove('active');
+
+        const onAnimEnd = () => {
+            cpPopup.removeEventListener('animationend', onAnimEnd);
+            cpPopup.classList.remove('active', 'focus-out');
+            colorPickerClosing = false;
+        };
+        cpPopup.addEventListener('animationend', onAnimEnd);
     }
 
     colorPickerRow.addEventListener('click', (e) => {
@@ -256,7 +427,7 @@ document.addEventListener('DOMContentLoaded', () => {
     cpHexInput.addEventListener('change', () => setColorFromHex(cpHexInput.value));
     cpHexInput.addEventListener('blur', () => { cpHexInput.value = selectedAccentColor.toUpperCase(); });
 
-    // ----- adaptation -----
+    // ── adaptation ──
 
     async function extractBgAccent(dataUrl) {
         return new Promise((resolve) => {
@@ -305,7 +476,27 @@ document.addEventListener('DOMContentLoaded', () => {
         adaptBgToggle.disabled = disabled;
     }
 
-    // ----- background management -----
+    // ── Cursor Spotlight for stat items ──
+
+    function initStatSpotlight(container) {
+        const items = container.querySelectorAll('.stat-item');
+        items.forEach(item => {
+            item.addEventListener('mousemove', (e) => {
+                const rect = item.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                item.style.setProperty('--spotlight-x', x + 'px');
+                item.style.setProperty('--spotlight-y', y + 'px');
+            });
+
+            item.addEventListener('mouseleave', () => {
+                item.style.setProperty('--spotlight-x', '50%');
+                item.style.setProperty('--spotlight-y', '50%');
+            });
+        });
+    }
+
+    // ── background management ──
 
     const backgroundsList = document.getElementById('backgrounds-list');
     const importBgBtn = document.getElementById('import-bg-btn');
@@ -324,9 +515,13 @@ document.addEventListener('DOMContentLoaded', () => {
             row.className = 'background-item';
             row.dataset.bgName = bg.name;
 
+            const displayName = bg.name
+                .replace(/\.(jpg|jpeg|png|webp)$/i, '')
+                .replace(/_/g, ' ');
+
             const label = document.createElement('span');
-            label.textContent = bg.name;
-            label.title = bg.name;
+            label.textContent = displayName;
+            label.title = displayName;
 
             const toggle = document.createElement('label');
             toggle.className = 'toggle';
@@ -347,7 +542,15 @@ document.addEventListener('DOMContentLoaded', () => {
             backgroundsList.appendChild(row);
         });
 
+        updateBackgroundHighlight();
         updateBackgroundsDisabled();
+    }
+
+    function updateBackgroundHighlight() {
+        const items = backgroundsList.querySelectorAll('.background-item');
+        items.forEach(item => {
+            item.classList.toggle('active-bg', item.dataset.bgName === activeBgName);
+        });
     }
 
     backgroundsList.addEventListener('mouseover', async (e) => {
@@ -357,8 +560,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (previewTimeout) clearTimeout(previewTimeout);
 
         const rect = row.getBoundingClientRect();
-        bgPreviewTooltip.style.left = (rect.right + 12) + 'px';
-        bgPreviewTooltip.style.top = Math.max(4, rect.top - 20) + 'px';
+        // Position tooltip outside the modal to the right with breathing room
+        let left = rect.right + 28;
+        let top = Math.max(4, rect.top - 16);
+        // Keep it on-screen
+        if (left + 250 > window.innerWidth) left = rect.left - 260;
+        bgPreviewTooltip.style.left = left + 'px';
+        bgPreviewTooltip.style.top = top + 'px';
 
         const result = await window.api.getBackgroundFile(row.dataset.bgName);
         if (result.error) return;
@@ -401,7 +609,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadBackgroundsList().then(() => updateBackgroundsDisabled());
 
-    // ----- settings categories -----
+    // ── settings categories ──
 
     settingsCats.forEach(btn => {
         btn.addEventListener('click', () => {
@@ -414,7 +622,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // ----- stats display -----
+    // ── stats display ──
 
     function formatDuration(ms) {
         if (!ms || ms <= 0) return '0 минут';
@@ -460,6 +668,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </div>
             `;
+
+            initStatSpotlight(statsContent);
         } catch {
             statsContent.innerHTML = '<p class="stats-empty">Не удалось загрузить статистику.</p>';
         }
@@ -471,11 +681,10 @@ document.addEventListener('DOMContentLoaded', () => {
         renderStats();
     });
 
-    // ----- general UI -----
+    // ── general UI ──
 
     function setBlockUI(blocked) {
         document.body.classList.toggle('ui-blocked', blocked);
-        changeDirBtn.disabled = blocked;
         resetDirBtn.disabled = blocked;
         deleteGameBtn.disabled = blocked;
         verifyIntegrityBtn.disabled = blocked;
@@ -494,50 +703,50 @@ document.addEventListener('DOMContentLoaded', () => {
 
         switch (currentState) {
             case IDLE:
-                mainBtn.textContent = 'СКАЧАТЬ';
+                mainBtn.textContent = 'Скачать';
                 mainBtn.disabled = false;
                 mainBtn.style.display = '';
                 updateBtn.style.display = 'none';
                 cancelBtn.style.display = 'none';
                 break;
             case READY:
-                mainBtn.textContent = 'ИГРАТЬ';
+                mainBtn.textContent = 'Играть';
                 mainBtn.disabled = false;
                 mainBtn.style.display = '';
                 updateBtn.style.display = 'none';
                 cancelBtn.style.display = 'none';
                 break;
             case UPDATE_AVAILABLE:
-                mainBtn.textContent = 'ИГРАТЬ';
+                mainBtn.textContent = 'Играть';
                 mainBtn.disabled = false;
                 mainBtn.style.display = '';
-                updateBtn.textContent = 'ОБНОВИТЬ';
+                updateBtn.textContent = 'Обновить';
                 updateBtn.style.display = '';
                 cancelBtn.style.display = 'none';
                 break;
             case DOWNLOADING:
-                mainBtn.textContent = 'ПАУЗА';
+                mainBtn.textContent = 'Пауза';
                 mainBtn.disabled = false;
                 mainBtn.style.display = '';
                 updateBtn.style.display = 'none';
                 cancelBtn.style.display = '';
                 break;
             case PAUSED:
-                mainBtn.textContent = 'ПРОДОЛЖИТЬ';
+                mainBtn.textContent = 'Продолжить';
                 mainBtn.disabled = false;
                 mainBtn.style.display = '';
                 updateBtn.style.display = 'none';
                 cancelBtn.style.display = '';
                 break;
             case SESSION_PENDING:
-                mainBtn.textContent = 'ПРОДОЛЖИТЬ';
+                mainBtn.textContent = 'Продолжить';
                 mainBtn.disabled = false;
                 mainBtn.style.display = '';
                 updateBtn.style.display = 'none';
                 cancelBtn.style.display = '';
                 break;
             case GAME_RUNNING:
-                mainBtn.textContent = 'ИГРА...';
+                mainBtn.textContent = 'Запуск...';
                 mainBtn.disabled = true;
                 mainBtn.style.display = '';
                 updateBtn.style.display = 'none';
@@ -595,7 +804,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    changeDirBtn.addEventListener('click', async () => {
+    // ── Path click → change directory (replaces "ИЗМЕНИТЬ" button) ──
+
+    installPathEl.addEventListener('click', async () => {
+        if (document.body.classList.contains('ui-blocked')) return;
         const selected = await window.api.selectDirectory();
         if (selected) {
             currentInstallPath = selected;
@@ -667,22 +879,32 @@ document.addEventListener('DOMContentLoaded', () => {
         window.api.openExternal('https://discord.gg/jd6EAGpaVg');
     });
 
+    // ── Dashboard — open in external browser ──
+
+    const DASHBOARD_URL = 'https://cesium.okzzdev.me/dashboard';
+
+    dashboardBtn.addEventListener('click', () => {
+        window.api.openExternal(DASHBOARD_URL);
+    });
+
+    // ── Settings open/close ──
+
     settingsBtn.addEventListener('click', () => {
-        settingsOverlay.classList.add('active');
+        openSettings();
     });
 
     settingsClose.addEventListener('click', () => {
-        settingsOverlay.classList.remove('active');
+        closeSettings();
     });
 
     settingsOverlay.addEventListener('click', (e) => {
         if (e.target === settingsOverlay) {
-            settingsOverlay.classList.remove('active');
+            closeSettings();
         }
     });
 
     checkUpdatesBtn.addEventListener('click', async () => {
-        settingsOverlay.classList.remove('active');
+        closeSettings();
         try {
             const result = await window.api.checkUpdate(currentInstallPath);
             if (result.error) {
@@ -701,7 +923,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     checkClientUpdatesBtn.addEventListener('click', async () => {
-        settingsOverlay.classList.remove('active');
+        closeSettings();
         try {
             const result = await window.api.checkForClientUpdates();
             if (result.error) {
@@ -719,7 +941,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     verifyIntegrityBtn.addEventListener('click', async () => {
-        settingsOverlay.classList.remove('active');
+        closeSettings();
         setBlockUI(true);
         showProgress(true);
         setProgress('Проверка целостности игры...', 0);
@@ -758,7 +980,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     deleteGameBtn.addEventListener('click', async () => {
-        settingsOverlay.classList.remove('active');
+        closeSettings();
         if (!confirm('Удалить все файлы игры?')) return;
         setBlockUI(true);
         const result = await window.api.deleteGame(currentInstallPath);

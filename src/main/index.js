@@ -13,6 +13,8 @@ let mainWindow;
 let updateCheckCache = { time: 0, result: null };
 const downloader = new Downloader();
 
+// Dashboard now opens in external browser — no session config needed.
+
 function createWindow() {
   logger.info('Creating main window');
   const saved = settings.getAll();
@@ -33,6 +35,7 @@ function createWindow() {
       preload: config.PRELOAD_PATH,
       nodeIntegration: false,
       contextIsolation: true,
+      webviewTag: true,
     },
   });
 
@@ -284,6 +287,19 @@ function registerIpcHandlers() {
     });
     if (canceled || filePaths.length === 0) return { error: 'cancelled' };
     return backgrounds.importFile(filePaths[0]);
+  });
+
+  /**
+   * When Dashboard opens, focus the main window so the webview's
+   * Turnstile iframe can receive proper focus/blur events.
+   * Cloudflare challenges rely on hasFocus() returning true.
+   */
+  ipcMain.handle('dashboard:focus', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      // Focus the main window — propagates to the active webview
+      mainWindow.focus();
+      mainWindow.webContents.focus();
+    }
   });
 }
 
